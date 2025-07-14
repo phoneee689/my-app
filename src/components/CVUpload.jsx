@@ -22,34 +22,39 @@ import {
   Col,
   Tag,
   message,
-  Typography as AntdTypography,
+  List,
 } from "antd";
-import api from "../config/axios"; // ✅ Axios instance giống file trước
+import api from "../config/axios";
 
 const { Title, Text, Paragraph } = Typography;
 const { Dragger } = Upload;
 
 const CVUpload = () => {
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [jobRecommendations, setJobRecommendations] = useState([]);
   const navigate = useNavigate();
 
-  const handleFileSelect = (file) => {
-    if (
-      file &&
-      (file.type === "application/pdf" ||
+  const handleFileSelect = (fileList) => {
+    const validFiles = Array.from(fileList).filter(
+      (file) =>
+        file.type === "application/pdf" ||
         file.name.endsWith(".pdf") ||
         file.name.endsWith(".doc") ||
-        file.name.endsWith(".docx"))
-    ) {
-      setSelectedFile(file);
-      return false;
-    } else {
-      message.error("Vui lòng chọn tệp CV hợp lệ (PDF, DOC, hoặc DOCX)");
-      setSelectedFile(null);
-      return false;
+        file.name.endsWith(".docx")
+    );
+
+    if (validFiles.length !== fileList.length) {
+      message.error("Một số tệp không hợp lệ. Chỉ hỗ trợ PDF, DOC, hoặc DOCX.");
     }
+
+    if (validFiles.length > 0) {
+      setSelectedFiles(validFiles);
+    } else {
+      setSelectedFiles([]);
+    }
+
+    return false; // Prevent default upload behavior
   };
 
   const initializeSystem = async () => {
@@ -58,8 +63,8 @@ const CVUpload = () => {
   };
 
   const uploadCV = async () => {
-    if (!selectedFile) {
-      message.error("Vui lòng chọn tệp CV trước");
+    if (selectedFiles.length === 0) {
+      message.error("Vui lòng chọn ít nhất một tệp CV");
       return;
     }
 
@@ -73,7 +78,9 @@ const CVUpload = () => {
       message.loading({ content: "Đang phân tích CV...", key: "status" });
 
       const formData = new FormData();
-      formData.append("cvFile", selectedFile);
+      selectedFiles.forEach((file) => {
+        formData.append("cvFiles", file); // Use "cvFiles" to indicate multiple files
+      });
 
       const response = await api.post("/complete-flow/upload-cv", formData, {
         headers: {
@@ -101,10 +108,10 @@ const CVUpload = () => {
   };
 
   const uploadProps = {
-    name: "cvFile",
-    multiple: false,
+    name: "cvFiles",
+    multiple: true, // Enable multiple file uploads
     accept: ".pdf,.doc,.docx",
-    beforeUpload: handleFileSelect,
+    beforeUpload: (file, fileList) => handleFileSelect(fileList),
     showUploadList: false,
   };
 
@@ -124,22 +131,30 @@ const CVUpload = () => {
 
       <Card style={{ marginBottom: "32px" }}>
         <Dragger {...uploadProps} disabled={isUploading}>
-          {selectedFile ? (
+          {selectedFiles.length > 0 ? (
             <Space direction="vertical" size="large">
-             <div className="flex space-x-2">
-             <FileText style={{ fontSize: "64px", color: "#52c41a" }} />
-             <Title level={4}>Tệp đã chọn:</Title>
-             </div>
-              <Text strong>{selectedFile.name}</Text>
-              <Text type="secondary">
-                Kích thước: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-              </Text>
+              <div className="flex space-x-2">
+                <FileText style={{ fontSize: "64px", color: "#52c41a" }} />
+                <Title level={4}>Các tệp đã chọn ({selectedFiles.length}):</Title>
+              </div>
+              <List
+                dataSource={selectedFiles}
+                renderItem={(file) => (
+                  <List.Item>
+                    <Text strong>{file.name}</Text>
+                    <Text type="secondary">
+                      {" "}
+                      - Kích thước: {(file.size / 1024 / 1024).toFixed(2)} MB
+                    </Text>
+                  </List.Item>
+                )}
+              />
             </Space>
           ) : (
             <Space direction="vertical" size="large">
               <div className="flex space-x-2">
-              <Search style={{ fontSize: "64px", color: "#1890ff" }} />
-              <Title level={4}>Kéo và thả CV hoặc nhấn để chọn</Title>
+                <Search style={{ fontSize: "64px", color: "#1890ff" }} />
+                <Title level={4}>Kéo và thả CV hoặc nhấn để chọn</Title>
               </div>
               <Text type="secondary">Định dạng hỗ trợ: PDF, DOC, DOCX</Text>
               <Text type="secondary">Dung lượng tối đa: 10MB</Text>
@@ -154,7 +169,7 @@ const CVUpload = () => {
           size="large"
           icon={isUploading ? <Loader2 className="animate-spin" /> : <FileUp />}
           onClick={uploadCV}
-          disabled={!selectedFile || isUploading}
+          disabled={selectedFiles.length === 0 || isUploading}
           loading={isUploading}
           style={{ height: "48px", paddingLeft: "32px", paddingRight: "32px" }}
         >
@@ -235,7 +250,7 @@ const CVUpload = () => {
         </div>
       )}
 
-      {!isUploading && jobRecommendations.length === 0 && selectedFile && (
+      {!isUploading && selectedFiles.length > 0 && jobRecommendations.length === 0 && (
         <div style={{ marginTop: "48px", textAlign: "center" }}>
           <Card>
             <Space direction="vertical" size="large">
