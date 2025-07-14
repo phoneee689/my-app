@@ -1,267 +1,265 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  FileUp,
-  Loader2,
-  Briefcase,
-  FileText,
-  Building2,
-  MapPin,
-  ClipboardList,
-  Link2,
-  Search,
-  Users,
-} from "lucide-react";
-import {
-  Upload,
-  Button,
-  Card,
-  Typography,
-  Space,
-  Row,
-  Col,
-  Tag,
-  message,
-  List,
-} from "antd";
-import api from "../config/axios";
 
-const { Title, Text, Paragraph } = Typography;
-const { Dragger } = Upload;
+import React, { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { Upload, Button, Card, Spin, Alert, Typography, List } from "antd";
+import { UploadOutlined } from "@ant-design/icons";
+
+const { Title, Paragraph } = Typography;
 
 const CVUpload = () => {
-  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [jobRecommendations, setJobRecommendations] = useState([]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  const handleFileSelect = (fileList) => {
-    const validFiles = Array.from(fileList).filter(
-      (file) =>
-        file.type === "application/pdf" ||
+  const API_BASE = "http://localhost:3000/api/v1";
+
+  const handleFileSelect = (file) => {
+    if (
+      file &&
+      (file.type === "application/pdf" ||
         file.name.endsWith(".pdf") ||
         file.name.endsWith(".doc") ||
-        file.name.endsWith(".docx")
-    );
-
-    if (validFiles.length !== fileList.length) {
-      message.error("Một số tệp không hợp lệ. Chỉ hỗ trợ PDF, DOC, hoặc DOCX.");
-    }
-
-    if (validFiles.length > 0) {
-      setSelectedFiles(validFiles);
+        file.name.endsWith(".docx"))
+    ) {
+      setSelectedFile(file);
+      setError("");
+      setSuccess("");
     } else {
-      setSelectedFiles([]);
+      setError("Please select a valid CV file (PDF, DOC, or DOCX)");
+      setSelectedFile(null);
     }
-
-    return false; // Prevent default upload behavior
+    return false; // Prevent automatic upload by Ant Design
   };
 
   const initializeSystem = async () => {
-    const res = await api.post("/complete-flow/initialize");
-    return res.data;
+    try {
+      const response = await fetch(`${API_BASE}/complete-flow/initialize`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to initialize system");
+      }
+      return await response.json();
+    } catch (error) {
+      console.error("Initialize error:", error);
+      throw error;
+    }
   };
 
   const uploadCV = async () => {
-    if (selectedFiles.length === 0) {
-      message.error("Vui lòng chọn ít nhất một tệp CV");
+    if (!selectedFile) {
+      setError("Please select a CV file first");
       return;
     }
 
     setIsUploading(true);
+    setError("");
+    setSuccess("");
     setJobRecommendations([]);
 
     try {
-      message.loading({ content: "Khởi tạo hệ thống...", key: "status" });
+      setSuccess("🔄 Initializing recommendation system...");
       await initializeSystem();
 
-      message.loading({ content: "Đang phân tích CV...", key: "status" });
-
+      setSuccess("📤 Uploading and analyzing CV...");
       const formData = new FormData();
-      selectedFiles.forEach((file) => {
-        formData.append("cvFiles", file); // Use "cvFiles" to indicate multiple files
+      formData.append("cvFile", selectedFile);
+
+      const response = await fetch(`${API_BASE}/complete-flow/upload-cv`, {
+        method: "POST",
+        body: formData,
       });
 
-      const response = await api.post("/complete-flow/upload-cv", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
 
-      const result = response.data;
+      const result = await response.json();
 
       if (result.success) {
         setJobRecommendations(result.data.jobRecommendations || []);
-        message.success({
-          content: `Đã tìm thấy ${result.data.totalRecommendations || 0} công việc phù hợp`,
-          key: "status",
-        });
+        setSuccess(
+          `✅ Success! Found ${
+            result.data.totalRecommendations || 0
+          } job recommendations`
+        );
       } else {
-        throw new Error(result.error || "Không thể xử lý CV");
+        throw new Error(result.error || "Upload failed");
       }
     } catch (error) {
       console.error("Upload error:", error);
-      message.error({ content: `Lỗi: ${error.message}`, key: "status" });
+      setError(`❌ Error: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
   };
 
   const uploadProps = {
-    name: "cvFiles",
-    multiple: true, // Enable multiple file uploads
+    beforeUpload: handleFileSelect,
+    fileList: selectedFile ? [selectedFile] : [],
+    onRemove: () => setSelectedFile(null),
     accept: ".pdf,.doc,.docx",
-    beforeUpload: (file, fileList) => handleFileSelect(fileList),
-    showUploadList: false,
+    showUploadList: {
+      showRemoveIcon: true,
+    },
   };
 
   return (
-    <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: "32px" }}>
-        <Title level={2}>
-          <Space>
-            <FileUp style={{ color: "#1890ff" }} />
-            Tải lên CV của bạn
-          </Space>
+    <div className="container mx-auto p-6">
+      <Card className="shadow-lg">
+        <Title level={2} className="text-center mb-4">
+          📄 Upload Your CV
         </Title>
-        <Text type="secondary" style={{ fontSize: "16px" }}>
-          Nhận gợi ý công việc phù hợp từ hệ thống AI thông minh
-        </Text>
-      </div>
+        <Paragraph className="text-center text-gray-600 mb-6">
+          Upload your CV to get personalized job recommendations powered by AI
+        </Paragraph>
 
-      <Card style={{ marginBottom: "32px" }}>
-        <Dragger {...uploadProps} disabled={isUploading}>
-          {selectedFiles.length > 0 ? (
-            <Space direction="vertical" size="large">
-              <div className="flex space-x-2">
-                <FileText style={{ fontSize: "64px", color: "#52c41a" }} />
-                <Title level={4}>Các tệp đã chọn ({selectedFiles.length}):</Title>
-              </div>
-              <List
-                dataSource={selectedFiles}
-                renderItem={(file) => (
-                  <List.Item>
-                    <Text strong>{file.name}</Text>
-                    <Text type="secondary">
-                      {" "}
-                      - Kích thước: {(file.size / 1024 / 1024).toFixed(2)} MB
-                    </Text>
-                  </List.Item>
-                )}
-              />
-            </Space>
-          ) : (
-            <Space direction="vertical" size="large">
-              <div className="flex space-x-2">
-                <Search style={{ fontSize: "64px", color: "#1890ff" }} />
-                <Title level={4}>Kéo và thả CV hoặc nhấn để chọn</Title>
-              </div>
-              <Text type="secondary">Định dạng hỗ trợ: PDF, DOC, DOCX</Text>
-              <Text type="secondary">Dung lượng tối đa: 10MB</Text>
-            </Space>
-          )}
-        </Dragger>
-      </Card>
-
-      <div style={{ textAlign: "center", marginBottom: "24px" }}>
-        <Button
-          type="primary"
-          size="large"
-          icon={isUploading ? <Loader2 className="animate-spin" /> : <FileUp />}
-          onClick={uploadCV}
-          disabled={selectedFiles.length === 0 || isUploading}
-          loading={isUploading}
-          style={{ height: "48px", paddingLeft: "32px", paddingRight: "32px" }}
+        {/* File Upload Area */}
+        <Upload
+          {...uploadProps}
+          className="flex justify-center"
+          listType="picture"
         >
-          {isUploading ? "Đang xử lý..." : "Tìm công việc phù hợp"}
-        </Button>
-      </div>
+          <Button
+            icon={<UploadOutlined />}
+            size="large"
+            className="bg-blue-500 text-white hover:bg-blue-600"
+          >
+            {selectedFile ? `Selected: ${selectedFile.name}` : "Select CV File"}
+          </Button>
+        </Upload>
+        {selectedFile && (
+          <div className="text-center mt-4">
+            <Paragraph>
+              File Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+            </Paragraph>
+          </div>
+        )}
+        {!selectedFile && (
+          <div className="text-center mt-4 text-gray-500">
+            <Paragraph>Supported formats: PDF, DOC, DOCX</Paragraph>
+            <Paragraph>Maximum size: 10MB</Paragraph>
+          </div>
+        )}
 
-      {jobRecommendations.length > 0 && (
-        <div style={{ marginTop: "48px" }}>
-          <Title level={3} style={{ textAlign: "center", marginBottom: "24px" }}>
-            <Space>
-              <Briefcase style={{ color: "#1890ff" }} />
-              Công việc được đề xuất ({jobRecommendations.length})
-            </Space>
-          </Title>
+        {/* Upload Button */}
+        <div className="text-center mt-6">
+          <Button
+            type="primary"
+            size="large"
+            onClick={uploadCV}
+            disabled={!selectedFile || isUploading}
+            loading={isUploading}
+            className="bg-green-500 hover:bg-green-600"
+          >
+            {isUploading ? "Processing..." : "🚀 Get Job Recommendations"}
+          </Button>
+        </div>
 
-          <Row gutter={[16, 16]}>
-            {jobRecommendations.map((job, index) => (
-              <Col xs={24} sm={12} lg={8} key={index}>
-                <Card
-                  hoverable
-                  style={{ height: "100%" }}
-                  actions={[
-                    <Button
-                      type="primary"
-                      icon={<Search />}
-                      onClick={() => navigate(`/job/${job.jobId}`)}
-                    >
-                      Chi tiết
-                    </Button>,
-                    job.jobUrl && (
-                      <Button
-                        icon={<Link2 />}
-                        onClick={() => window.open(job.jobUrl, "_blank")}
-                      >
-                        Trang gốc
-                      </Button>
-                    ),
-                  ].filter(Boolean)}
-                >
-                  <Card.Meta
+        {/* Messages */}
+        {error && (
+          <Alert
+            message={error}
+            type="error"
+            showIcon
+            className="mt-4 max-w-md mx-auto"
+          />
+        )}
+        {success && (
+          <Alert
+            message={success}
+            type="success"
+            showIcon
+            className="mt-4 max-w-md mx-auto"
+          />
+        )}
+
+        {/* Loading Spinner */}
+        {isUploading && (
+          <div className="text-center mt-6">
+            <Spin size="large" />
+          </div>
+        )}
+
+        {/* Job Recommendations Results */}
+        {jobRecommendations.length > 0 && (
+          <div className="mt-8">
+            <Title level={3} className="text-center">
+              💼 Recommended Jobs ({jobRecommendations.length})
+            </Title>
+            <List
+              grid={{ gutter: 16, xs: 1, sm: 2, md: 3 }}
+              dataSource={jobRecommendations}
+              renderItem={(job, index) => (
+                <List.Item>
+                  <Card
                     title={
-                      <Space>
-                        <Building2 style={{ color: "#1890ff" }} />
-                        {job.jobTitle || "Tên công việc"}
-                      </Space>
+                      <div className="flex justify-between items-center">
+                        <span>{job.jobTitle || "Job Title"}</span>
+                        <span className="text-green-500">
+                          🎯 {job.matchPercentage || `${(job.score * 100).toFixed(1)}%`}
+                        </span>
+                      </div>
                     }
-                    description={
-                      <Space direction="vertical" style={{ width: "100%" }}>
-                        <Tag color="blue">
-                          <Users style={{ marginRight: "4px" }} />
-                          {(job.matchPercentage || (job.score * 100)).toFixed(1)}%
-                        </Tag>
-                        <Text>
-                          <Building2 style={{ marginRight: "8px" }} />
-                          <Text strong>Công ty:</Text> {job.company || "Chưa rõ"}
-                        </Text>
-                        <Text>
-                          <MapPin style={{ marginRight: "8px" }} />
-                          <Text strong>Địa điểm:</Text> {job.location || "Không có thông tin"}
-                        </Text>
-                        <Text>
-                          <ClipboardList style={{ marginRight: "8px" }} />
-                          <Text strong>ID:</Text> {job.jobId}
-                        </Text>
-                        {job.description && (
-                          <Paragraph ellipsis={{ rows: 3, expandable: true }} style={{ margin: 0 }}>
-                            <Text strong>Mô tả:</Text> {job.description}
-                          </Paragraph>
-                        )}
-                      </Space>
-                    }
-                  />
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </div>
-      )}
+                    extra={<span className="text-gray-500">#{index + 1}</span>}
+                    className="shadow-md"
+                  >
+                    <Paragraph>
+                      <strong>🏢 Company:</strong> {job.company || "Company info available"}
+                    </Paragraph>
+                    <Paragraph>
+                      <strong>📍 Location:</strong> {job.location || "Location not specified"}
+                    </Paragraph>
+                    <Paragraph>
+                      <strong>🆔 Job ID:</strong> {job.jobId}
+                    </Paragraph>
+                    {job.description && (
+                      <Paragraph>
+                        <strong>📝 Description:</strong>
+                        <br />
+                        {job.description.length > 150
+                          ? job.description.substring(0, 150) + "..."
+                          : job.description}
+                      </Paragraph>
+                    )}
+                    <div className="flex justify-between mt-4">
+                      <Button
+                        onClick={() => navigate(`/job/${job.jobId}`)}
+                        type="primary"
+                      >
+                        📄 View Details
+                      </Button>
+                      {job.jobUrl && (
+                        <Button
+                          href={job.jobUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          🔗 Original Job
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                </List.Item>
+              )}
+            />
+          </div>
+        )}
 
-      {!isUploading && selectedFiles.length > 0 && jobRecommendations.length === 0 && (
-        <div style={{ marginTop: "48px", textAlign: "center" }}>
-          <Card>
-            <Space direction="vertical" size="large">
-              <Briefcase style={{ fontSize: "32px", color: "#d9d9d9" }} />
-              <Text type="secondary" style={{ fontSize: "16px" }}>
-                Không tìm thấy công việc phù hợp. Thử CV khác hoặc đảm bảo CV có kỹ năng rõ ràng.
-              </Text>
-            </Space>
-          </Card>
-        </div>
-      )}
+        {/* No Results Message */}
+        {!isUploading && jobRecommendations.length === 0 && selectedFile && (
+          <Alert
+            message="No job recommendations found. Try uploading a different CV or ensure your CV contains relevant skills and experience."
+            type="info"
+            showIcon
+            className="mt-4 max-w-md mx-auto"
+          />
+        )}
+      </Card>
     </div>
   );
 };

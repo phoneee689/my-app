@@ -1,192 +1,182 @@
-import React, { useState } from "react";
-import {
-  Briefcase,
-  Loader2,
-  Users,
-  User,
-  Target,
-  IdCard,
-  Search,
-} from "lucide-react";
-import {
-  Form,
-  Input,
-  Select,
-  Button,
-  Card,
-  Typography,
-  Space,
-  Row,
-  Col,
-  Tag,
-  Progress,
-  message,
-} from "antd";
-import api from "../config/axios";
 
-const { Title, Text } = Typography;
+import React, { useState } from "react";
+import { Form, Input, Select, Button, Card, Spin, Alert, Typography, List } from "antd";
+import "antd/dist/antd.css";
+
+const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
 const { Option } = Select;
 
 const CustomJobInput = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [cvRecommendations, setCvRecommendations] = useState([]);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [form] = Form.useForm();
 
-  const MESSAGE_KEY = "status";
+  const API_BASE = "http://localhost:3000/api/v1";
 
-  const convertFormToJobData = (values) => ({
-    title: values.title,
-    company: values.company,
-    location: values.location,
-    jobType: values.jobType,
-    salaryRange: values.salaryRange,
-    experience: values.experience,
-    education: values.education,
-    description: values.description,
-    requirements: values.requirements,
-    benefits: values.benefits,
-    skills: values.skills
-      ? values.skills.split(",").map((s) => s.trim())
-      : [],
-    industry: values.industry,
-  });
+  const convertFormToJobData = (values) => {
+    return {
+      title: values.title,
+      company: values.company,
+      location: values.location,
+      jobType: values.jobType,
+      salaryRange: values.salaryRange,
+      experience: values.experience,
+      education: values.education,
+      description: values.description,
+      requirements: values.requirements,
+      benefits: values.benefits,
+      skills: values.skills ? values.skills.split(",").map((s) => s.trim()) : [],
+      industry: values.industry,
+    };
+  };
 
   const submitJobData = async (values) => {
     setIsLoading(true);
+    setError("");
+    setSuccess("");
     setCvRecommendations([]);
 
     try {
       const jobData = convertFormToJobData(values);
 
-      message.loading({ content: "Initializing the system...", key: MESSAGE_KEY });
+      if (!jobData.title || jobData.title.trim() === "") {
+        throw new Error("Vui lòng nhập tên công việc");
+      }
+      if (
+        !jobData.skills ||
+        (Array.isArray(jobData.skills) && jobData.skills.length === 0)
+      ) {
+        throw new Error("Vui lòng nhập ít nhất một kỹ năng yêu cầu");
+      }
+      if (!jobData.requirements || jobData.requirements.trim() === "") {
+        throw new Error("Vui lòng nhập yêu cầu ứng viên");
+      }
 
-      const statusRes = await api.get("/recommendation/model-status");
-      const isBuilt = statusRes.data?.data?.isModelBuilt;
+      setSuccess("🔄 Đang khởi tạo hệ thống...");
 
-      if (!isBuilt) {
-        message.loading({ content: "Building AI model...", key: MESSAGE_KEY });
+      const statusResponse = await fetch(
+        `${API_BASE}/recommendation/model-status`
+      );
+      const statusResult = await statusResponse.json();
 
-        const buildRes = await api.post("/recommendation/build-model");
+      if (!statusResult.data.isModelBuilt) {
+        setSuccess("🔄 Đang xây dựng mô hình AI...");
+        const buildResponse = await fetch(
+          `${API_BASE}/recommendation/build-model`,
+          { method: "POST" }
+        );
 
-        if (!buildRes.data?.success) {
-          message.error({ content: "Error occurred while building the model", key: MESSAGE_KEY });
-          return;
+        if (!buildResponse.ok) {
+          throw new Error("Không thể xây dựng mô hình AI");
+        }
+
+        const buildResult = await buildResponse.json();
+        if (!buildResult.success) {
+          throw new Error("Lỗi khi xây dựng mô hình");
         }
       }
 
-      message.loading({ content: "Analyzing and matching CVs...", key: MESSAGE_KEY });
+      setSuccess("🔄 Đang phân tích và tìm kiếm CV phù hợp...");
 
-      const response = await api.post("/recommendation/cvs-for-custom-job?limit=20", jobData);
-      const result = response.data;
+      const response = await fetch(
+        `${API_BASE}/recommendation/cvs-for-custom-job?limit=20`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(jobData),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} - ${response.statusText}`);
+      }
+
+      const result = await response.json();
 
       if (result.success) {
         setCvRecommendations(result.data.recommendations || []);
-        message.success({
-          content: `Found ${result.data.recommendations?.length || 0} matching CVs from ${result.data.totalCVsAnalyzed || 0} analyzed`,
-          key: MESSAGE_KEY,
-        });
+        setSuccess(
+          `✅ Thành công! Tìm thấy ${
+            result.data.recommendations?.length || 0
+          } CV phù hợp từ ${result.data.totalCVsAnalyzed || 0} CV trong hệ thống`
+        );
       } else {
-        message.error({ content: result.error || "Failed to retrieve recommended CVs", key: MESSAGE_KEY });
+        throw new Error(result.error || "Không thể tìm kiếm CV");
       }
     } catch (error) {
       console.error("Error:", error);
-      message.error({ content: `Error: ${error.message}`, key: MESSAGE_KEY });
+      setError(`❌ Lỗi: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-      <div style={{ textAlign: "center", marginBottom: "32px" }}>
-        <Title level={2}>
-          <Space>
-            <Briefcase style={{ color: "#1890ff" }} />
-            Tìm CV cho Công việc
-          </Space>
+    <div className="container mx-auto p-6">
+      <Card className="shadow-lg">
+        <Title level={2} className="text-center mb-4">
+          💼 Tìm CV cho Công việc
         </Title>
-        <Text type="secondary" style={{ fontSize: "16px" }}>
+        <Paragraph className="text-center text-gray-600 mb-6">
           HR nhập thông tin công việc để tìm CV phù hợp nhất trong hệ thống
-        </Text>
-      </div>
+        </Paragraph>
 
-      <Card style={{ marginBottom: "32px" }}>
         <Form
           form={form}
           layout="vertical"
           onFinish={submitJobData}
-          initialValues={{ jobType: "Full-time" }}
+          className="grid grid-cols-1 md:grid-cols-2 gap-4"
         >
-          <Row gutter={[16, 16]}>
-            <Col xs={24} sm={12} lg={8}>
-              <Form.Item
-                label="Tên công việc"
-                name="title"
-                rules={[{ required: true, message: "Vui lòng nhập tên công việc" }]}
-              >
-                <Input
-                  placeholder="vd: Senior Frontend Developer"
-                  prefix={<Briefcase style={{ color: "#bfbfbf" }} />}
-                />
-              </Form.Item>
-            </Col>
+          <Form.Item
+            label="Tên công việc"
+            name="title"
+            rules={[{ required: true, message: "Vui lòng nhập tên công việc" }]}
+          >
+            <Input placeholder="vd: Senior Frontend Developer" />
+          </Form.Item>
 
-            <Col xs={24} sm={12} lg={8}>
-              <Form.Item label="Công ty" name="company">
-                <Input placeholder="vd: Tech Company ABC" prefix={<Users style={{ color: "#bfbfbf" }} />} />
-              </Form.Item>
-            </Col>
+          <Form.Item label="Công ty" name="company">
+            <Input placeholder="vd: Tech Company ABC" />
+          </Form.Item>
 
-            <Col xs={24} sm={12} lg={8}>
-              <Form.Item label="Địa điểm" name="location">
-                <Input placeholder="vd: Hồ Chí Minh" prefix={<Target style={{ color: "#bfbfbf" }} />} />
-              </Form.Item>
-            </Col>
+          <Form.Item label="Địa điểm" name="location">
+            <Input placeholder="vd: Hồ Chí Minh" />
+          </Form.Item>
 
-            <Col xs={24} sm={12} lg={8}>
-              <Form.Item label="Loại công việc" name="jobType">
-                <Select>
-                  <Option value="Full-time">Full-time</Option>
-                  <Option value="Part-time">Part-time</Option>
-                  <Option value="Contract">Contract</Option>
-                  <Option value="Internship">Internship</Option>
-                </Select>
-              </Form.Item>
-            </Col>
+          <Form.Item label="Loại công việc" name="jobType" initialValue="Full-time">
+            <Select>
+              <Option value="Full-time">Full-time</Option>
+              <Option value="Part-time">Part-time</Option>
+              <Option value="Contract">Contract</Option>
+              <Option value="Internship">Internship</Option>
+            </Select>
+          </Form.Item>
 
-            <Col xs={24} sm={12} lg={8}>
-              <Form.Item label="Mức lương" name="salaryRange">
-                <Input placeholder="vd: 25-35 triệu VNĐ" prefix={<IdCard style={{ color: "#bfbfbf" }} />} />
-              </Form.Item>
-            </Col>
+          <Form.Item label="Mức lương" name="salaryRange">
+            <Input placeholder="vd: 25-35 triệu VND" />
+          </Form.Item>
 
-            <Col xs={24} sm={12} lg={8}>
-              <Form.Item label="Kinh nghiệm yêu cầu" name="experience">
-                <Input placeholder="vd: 3+ năm kinh nghiệm" prefix={<Users style={{ color: "#bfbfbf" }} />} />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item label="Kinh nghiệm yêu cầu" name="experience">
+            <Input placeholder="vd: 3+ năm kinh nghiệm" />
+          </Form.Item>
 
-          <Row gutter={[16, 16]}>
-            <Col xs={24} sm={12}>
-              <Form.Item
-                label="Kỹ năng yêu cầu (phân cách bằng dấu phẩy)"
-                name="skills"
-                rules={[{ required: true, message: "Vui lòng nhập ít nhất một kỹ năng" }]}
-              >
-                <Input placeholder="vd: JavaScript, React, Vue.js, HTML, CSS" prefix={<Target style={{ color: "#bfbfbf" }} />} />
-              </Form.Item>
-            </Col>
+          <Form.Item
+            label="Kỹ năng yêu cầu (phân cách bằng dấu phẩy)"
+            name="skills"
+            rules={[{ required: true, message: "Vui lòng nhập ít nhất một kỹ năng" }]}
+            className="col-span-1 md:col-span-2"
+          >
+            <Input placeholder="vd: JavaScript, React, Vue.js, HTML, CSS" />
+          </Form.Item>
 
-            <Col xs={24} sm={12}>
-              <Form.Item label="Ngành nghề" name="industry">
-                <Input placeholder="vd: Information Technology" prefix={<Briefcase style={{ color: "#bfbfbf" }} />} />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item label="Ngành nghề" name="industry" className="col-span-1 md:col-span-2">
+            <Input placeholder="vd: Information Technology" />
+          </Form.Item>
 
-          <Form.Item label="Mô tả công việc" name="description">
+          <Form.Item label="Mô tả công việc" name="description" className="col-span-1 md:col-span-2">
             <TextArea rows={4} placeholder="Mô tả chi tiết về công việc..." />
           </Form.Item>
 
@@ -194,88 +184,96 @@ const CustomJobInput = () => {
             label="Yêu cầu ứng viên"
             name="requirements"
             rules={[{ required: true, message: "Vui lòng nhập yêu cầu ứng viên" }]}
+            className="col-span-1 md:col-span-2"
           >
             <TextArea rows={4} placeholder="Các yêu cầu cụ thể cho ứng viên..." />
           </Form.Item>
 
-          <Form.Item label="Quyền lợi" name="benefits">
+          <Form.Item label="Quyền lợi" name="benefits" className="col-span-1 md:col-span-2">
             <TextArea rows={3} placeholder="Các quyền lợi và phúc lợi cho nhân viên..." />
           </Form.Item>
 
-          <Form.Item>
+          <Form.Item className="col-span-1 md:col-span-2 text-center">
             <Button
               type="primary"
-              size="large"
-              icon={isLoading ? <Loader2 className="animate-spin" /> : <Search />}
               htmlType="submit"
+              size="large"
               loading={isLoading}
-              style={{ height: "48px", paddingLeft: "32px", paddingRight: "32px" }}
+              className="bg-green-500 hover:bg-green-600"
             >
-              {isLoading ? "Đang xử lý..." : "Tìm CV phù hợp"}
+              {isLoading ? "Đang xử lý..." : "🔍 Tìm CV phù hợp"}
             </Button>
           </Form.Item>
         </Form>
-      </Card>
 
-      {/* CV Recommendations Results */}
-      {cvRecommendations.length > 0 && (
-        <div style={{ marginTop: "48px" }}>
-          <Title level={3} style={{ textAlign: "center", marginBottom: "24px" }}>
-            <Space>
-              <Users style={{ color: "#1890ff" }} />
-              CV phù hợp được tìm thấy ({cvRecommendations.length})
-            </Space>
-          </Title>
+        {error && (
+          <Alert
+            message={error}
+            type="error"
+            showIcon
+            className="mt-4 max-w-md mx-auto"
+          />
+        )}
+        {success && (
+          <Alert
+            message={success}
+            type="success"
+            showIcon
+            className="mt-4 max-w-md mx-auto"
+          />
+        )}
 
-          <Row gutter={[16, 16]}>
-            {cvRecommendations.map((cv, index) => (
-              <Col xs={24} sm={12} lg={8} key={cv.cvId || index}>
-                <Card hoverable style={{ height: "100%" }}>
-                  <Space direction="vertical" style={{ width: "100%" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <Title level={5} style={{ margin: 0, flex: 1 }}>
-                        <Space>
-                          <User style={{ color: "#1890ff" }} />
-                          {cv.cvOwner || "Chưa có tên"}
-                        </Space>
+        {isLoading && (
+          <div className="text-center mt-6">
+            <Spin size="large" />
+          </div>
+        )}
+
+        {cvRecommendations.length > 0 && (
+          <div className="mt-8">
+            <Title level={3} className="text-center">
+              👥 CV phù hợp được tìm thấy ({cvRecommendations.length})
+            </Title>
+            <List
+              grid={{ gutter: 16, xs: 1, sm: 2, md: 3 }}
+              dataSource={cvRecommendations}
+              renderItem={(cv, index) => (
+                <List.Item>
+                  <Card className="shadow-md">
+                    <div className="flex justify-between items-center">
+                      <Title level={4} className="m-0">
+                        👤 {cv.cvOwner || "Chưa có tên"}
                       </Title>
-                      <Space direction="vertical" size="small">
-                        <Tag color="blue">
-                          <Target style={{ marginRight: "4px" }} />
-                          {(cv.score * 100).toFixed(1)}%
-                        </Tag>
-                        <Tag color="default">#{index + 1}</Tag>
-                      </Space>
+                      <span className="text-green-500">#{index + 1}</span>
                     </div>
+                    <Paragraph>
+                      <strong>🆔 CV ID:</strong> {cv.cvId}
+                    </Paragraph>
+                    <div className="bg-gray-200 rounded-full h-2 mt-2">
+                      <div
+                        className="bg-green-500 h-full rounded-full"
+                        style={{ width: `${cv.score * 100}%` }}
+                      ></div>
+                    </div>
+                    <Paragraph className="text-sm text-gray-600">
+                      Độ phù hợp: {(cv.score * 100).toFixed(1)}%
+                    </Paragraph>
+                  </Card>
+                </List.Item>
+              )}
+            />
+          </div>
+        )}
 
-                    <Space direction="vertical" size="small">
-                      <Text>
-                        <IdCard style={{ marginRight: "8px" }} />
-                        <Text strong>CV ID:</Text> {cv.cvId}
-                      </Text>
-
-                      <div>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                          <Text type="secondary">
-                            <Target style={{ marginRight: "4px" }} />
-                            Độ phù hợp:
-                          </Text>
-                          <Text type="secondary">{(cv.score * 100).toFixed(1)}%</Text>
-                        </div>
-                        <Progress
-                          percent={cv.score * 100}
-                          strokeColor={{ "0%": "#108ee9", "100%": "#87d068" }}
-                          showInfo={false}
-                        />
-                      </div>
-                    </Space>
-                  </Space>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </div>
-      )}
+        {!isLoading && cvRecommendations.length === 0 && success && !error && (
+          <Alert
+            message="Không tìm thấy CV phù hợp. Thử điều chỉnh các yêu cầu hoặc kỹ năng."
+            type="info"
+            showIcon
+            className="mt-4 max-w-md mx-auto"
+          />
+        )}
+      </Card>
     </div>
   );
 };

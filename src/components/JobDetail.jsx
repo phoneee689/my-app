@@ -1,65 +1,46 @@
+
 import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import {
-  Briefcase,
-  ArrowLeft,
-  Building2,
-  MapPin,
-  DollarSign,
-  Clock,
-  ClipboardList,
-  Gift,
-  Info,
-  GraduationCap,
-  BookOpen,
-  CalendarCheck2,
-} from "lucide-react";
-import {
-  Button,
-  Card,
-  Typography,
-  Space,
-  Spin,
-  Row,
-  Col,
-  Tag,
-  Descriptions,
-  message,
-} from "antd";
-import api from "../config/axios"; // ✅ dùng config Axios
+import { Card, Button, Spin, Alert, Typography, Descriptions } from "antd";
+import { ArrowLeftOutlined } from "@ant-design/icons";
+import "antd/dist/antd.css";
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Paragraph } = Typography;
 
 const JobDetail = () => {
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [job, setJob] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const API_BASE = "http://localhost:3000/api/v1";
 
   const fetchJobDetails = useCallback(async () => {
     try {
       setIsLoading(true);
-      message.loading({ content: "Đang tải chi tiết công việc...", key: "load" });
+      setError("");
 
-      const response = await api.get(`/recommendation/job/${jobId}`);
-      const result = response.data;
+      const response = await fetch(`${API_BASE}/recommendation/job/${jobId}`);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch job details: ${response.statusText}`);
+      }
+
+      const result = await response.json();
 
       if (result.success) {
         setJob(result.data.job);
-        message.success({ content: "Tải thành công", key: "load", duration: 1 });
       } else {
-        message.error({ content: result.message || "Không thể tải dữ liệu", key: "load" });
+        throw new Error(result.message || "Failed to load job details");
       }
     } catch (error) {
-      console.error("Lỗi khi tải chi tiết công việc:", error);
-      message.error({
-        content: `Lỗi: ${error?.response?.data?.message || error.message}`,
-        key: "load",
-      });
+      console.error("Error fetching job details:", error);
+      setError(error.message);
     } finally {
       setIsLoading(false);
     }
-  }, [jobId]);
+  }, [jobId, API_BASE]);
 
   useEffect(() => {
     if (jobId) {
@@ -73,201 +54,149 @@ const JobDetail = () => {
 
   if (isLoading) {
     return (
-      <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-        <div style={{ textAlign: "center", padding: "96px 0" }}>
-          <Spin size="large" />
-          <div style={{ marginTop: "16px" }}>
-            <Text type="secondary">Đang tải thông tin công việc...</Text>
+      <div className="container mx-auto p-6">
+        <Card className="shadow-lg">
+          <div className="text-center">
+            <Spin size="large" />
+            <Paragraph className="mt-4">Đang tải thông tin công việc...</Paragraph>
+            <Paragraph>Job ID: {jobId}</Paragraph>
           </div>
-        </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-6">
+        <Card className="shadow-lg">
+          <Alert message={`❌ Lỗi: ${error}`} type="error" showIcon className="mb-4" />
+          <Paragraph>Job ID: {jobId}</Paragraph>
+          <Paragraph>API URL: {API_BASE}/recommendation/job/{jobId}</Paragraph>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={handleBackClick}
+            className="bg-blue-500 text-white hover:bg-blue-600"
+          >
+            ← Quay lại danh sách việc làm
+          </Button>
+        </Card>
       </div>
     );
   }
 
   if (!job) {
     return (
-      <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-        <Card>
-          <Space direction="vertical" size="large" style={{ textAlign: "center", width: "100%" }}>
-            <Info style={{ fontSize: "48px", color: "#d9d9d9" }} />
-            <Text type="danger">Không tìm thấy thông tin công việc.</Text>
-            <Button
-              type="primary"
-              icon={<ArrowLeft />}
-              onClick={handleBackClick}
-            >
-              Quay lại danh sách
-            </Button>
-          </Space>
+      <div className="container mx-auto p-6">
+        <Card className="shadow-lg">
+          <Alert message="Không tìm thấy công việc" type="warning" showIcon className="mb-4" />
+          <Paragraph>Job ID: {jobId}</Paragraph>
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={handleBackClick}
+            className="bg-blue-500 text-white hover:bg-blue-600"
+          >
+            ← Quay lại danh sách việc làm
+          </Button>
         </Card>
       </div>
     );
   }
 
   return (
-    <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
-      {/* Header with Back Button */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: "32px" }}>
-        <Button
-          icon={<ArrowLeft />}
-          onClick={handleBackClick}
-          style={{ marginRight: "16px" }}
-        >
-          Quay lại
-        </Button>
-        <Title level={2} style={{ margin: 0 }}>
-          <Space>
-            <Briefcase style={{ color: "#1890ff" }} />
+    <div className="container mx-auto p-6">
+      <Card className="shadow-lg">
+        <div className="flex items-center mb-6">
+          <Button
+            icon={<ArrowLeftOutlined />}
+            onClick={handleBackClick}
+            className="mr-4 bg-gray-200 hover:bg-gray-300"
+          >
+            Quay lại
+          </Button>
+          <Title level={2} className="m-0 text-indigo-600">
             Chi tiết công việc
-          </Space>
-        </Title>
-      </div>
+          </Title>
+        </div>
 
-      {/* Job Header */}
-      <Card
-        style={{
-          background: "linear-gradient(135deg, #1890ff 0%, #722ed1 100%)",
-          color: "white",
-          marginBottom: "32px",
-        }}
-        bodyStyle={{ padding: "32px" }}
-      >
-        <Title level={2} style={{ color: "white", marginBottom: "8px" }}>
-          <Space>
-            <Briefcase style={{ color: "white" }} />
+        {/* Job Header */}
+        <Card
+          className="mb-6"
+          style={{
+            background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+          }}
+        >
+          <Title level={3} className="text-white m-0">
             {job.title}
-          </Space>
-        </Title>
-        <Title level={3} style={{ color: "rgba(255,255,255,0.9)", marginBottom: "16px" }}>
-          <Space>
-            <Building2 style={{ color: "white" }} />
-            {job.company}
-          </Space>
-        </Title>
-        <Space size="large">
-          <Tag color="white" style={{ color: "#1890ff", border: "none" }}>
-            <MapPin style={{ marginRight: "4px" }} />
-            {job.location}
-          </Tag>
-          <Tag color="white" style={{ color: "#1890ff", border: "none" }}>
-            <Briefcase style={{ marginRight: "4px" }} />
-            {job.jobType}
-          </Tag>
-          <Tag color="white" style={{ color: "#1890ff", border: "none" }}>
-            <DollarSign style={{ marginRight: "4px" }} />
-            {job.salaryRange}
-          </Tag>
-        </Space>
-      </Card>
+          </Title>
+          <Paragraph className="text-white opacity-90 text-lg">
+            🏢 {job.company}
+          </Paragraph>
+          <div className="flex flex-wrap gap-4 text-white text-base">
+            <span>📍 {job.location}</span>
+            <span>💼 {job.jobType}</span>
+            <span>💰 {job.salaryRange}</span>
+          </div>
+        </Card>
 
-      {/* Job Details Grid */}
-      <Row gutter={[24, 24]}>
-        {/* Description */}
-        <Col xs={24} lg={12}>
-          <Card title={
-            <Space>
-              <ClipboardList style={{ color: "#1890ff" }} />
-              Mô tả công việc
-            </Space>
-          }>
-            <Paragraph style={{ margin: 0 }}>
-              {job.description || "Không có mô tả"}
-            </Paragraph>
+        {/* Job Details */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card title="📋 Mô tả công việc" className="shadow-md">
+            <Paragraph>{job.description || "Không có mô tả"}</Paragraph>
           </Card>
-        </Col>
 
-        {/* Requirements */}
-        {job.requirements && (
-          <Col xs={24} lg={12}>
-            <Card title={
-              <Space>
-                <ClipboardList style={{ color: "#1890ff" }} />
-                Yêu cầu
-              </Space>
-            }>
-              <Paragraph style={{ margin: 0 }}>
-                {job.requirements}
-              </Paragraph>
+          {job.requirements && (
+            <Card title="✅ Yêu cầu" className="shadow-md">
+              <Paragraph>{job.requirements}</Paragraph>
             </Card>
-          </Col>
-        )}
+          )}
 
-        {/* Benefits */}
-        {job.benefits && (
-          <Col xs={24} lg={12}>
-            <Card title={
-              <Space>
-                <Gift style={{ color: "#1890ff" }} />
-                Quyền lợi
-              </Space>
-            }>
-              <Paragraph style={{ margin: 0 }}>
-                {job.benefits}
-              </Paragraph>
+          {job.benefits && (
+            <Card title="🎁 Quyền lợi" className="shadow-md">
+              <Paragraph>{job.benefits}</Paragraph>
             </Card>
-          </Col>
-        )}
+          )}
 
-        {/* Job Info */}
-        <Col xs={24} lg={12}>
-          <Card title={
-            <Space>
-              <Info style={{ color: "#1890ff" }} />
-              Thông tin công việc
-            </Space>
-          }>
-            <Descriptions column={1} size="small">
-              <Descriptions.Item label={<Space><BookOpen /> Kinh nghiệm</Space>}>
+          <Card title="ℹ️ Thông tin công việc" className="shadow-md">
+            <Descriptions column={1}>
+              <Descriptions.Item label="Kinh nghiệm">
                 {job.experience || "Không yêu cầu"}
               </Descriptions.Item>
-              <Descriptions.Item label={<Space><GraduationCap /> Học vấn</Space>}>
+              <Descriptions.Item label="Học vấn">
                 {job.education || "Không yêu cầu"}
               </Descriptions.Item>
-              <Descriptions.Item label={<Space><Briefcase /> Ngành nghề</Space>}>
+              <Descriptions.Item label="Ngành nghề">
                 {job.industry || "Không xác định"}
               </Descriptions.Item>
-              <Descriptions.Item label={<Space><Clock /> Giờ làm việc</Space>}>
+              <Descriptions.Item label="Giờ làm việc">
                 {job.workingHours || "8 giờ/ngày"}
               </Descriptions.Item>
               {job.deadline && (
-                <Descriptions.Item label={<Space><CalendarCheck2 /> Hạn nộp</Space>}>
+                <Descriptions.Item label="Hạn nộp hồ sơ">
                   {new Date(job.deadline).toLocaleDateString("vi-VN")}
                 </Descriptions.Item>
               )}
             </Descriptions>
           </Card>
-        </Col>
-      </Row>
+        </div>
 
-      {/* Apply Button */}
-      <div style={{ textAlign: "center", marginTop: "48px" }}>
-        <Button
-          type="primary"
-          size="large"
-          icon={<ClipboardList />}
-          style={{
-            height: "56px",
-            paddingLeft: "48px",
-            paddingRight: "48px",
-            fontSize: "18px",
-            fontWeight: "bold",
-            background: "linear-gradient(135deg, #52c41a 0%, #389e0d 100%)",
-            border: "none",
-          }}
-        >
-          Ứng tuyển ngay
-        </Button>
-      </div>
+        {/* Apply Button */}
+        <div className="text-center mt-8">
+          <Button
+            type="primary"
+            size="large"
+            className="bg-green-500 hover:bg-green-600"
+            style={{ padding: "0 3rem" }}
+          >
+            🚀 Ứng tuyển ngay
+          </Button>
+        </div>
 
-      {/* Posted Date */}
-      <div style={{ textAlign: "center", marginTop: "32px" }}>
-        <Text type="secondary">
-          <Space>
-            <CalendarCheck2 />
-            Đăng ngày: {new Date(job.postedDate).toLocaleDateString("vi-VN")}
-          </Space>
-        </Text>
-      </div>
+        {/* Posted Date */}
+        <Paragraph className="text-center mt-6 text-gray-500">
+          <small>Đăng ngày: {new Date(job.postedDate).toLocaleDateString("vi-VN")}</small>
+        </Paragraph>
+      </Card>
     </div>
   );
 };
