@@ -1,38 +1,39 @@
-
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Upload, Button, Card, Spin, Alert, Typography, List } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
+import "antd/dist/antd.css";
 
 const { Title, Paragraph } = Typography;
 
 const CVUpload = () => {
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [fileList, setFileList] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
   const [jobRecommendations, setJobRecommendations] = useState([]);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
   const API_BASE = "http://localhost:3000/api/v1";
 
-  const handleFileSelect = (file) => {
-    if (
-      file &&
-      (file.type === "application/pdf" ||
-        file.name.endsWith(".pdf") ||
-        file.name.endsWith(".doc") ||
-        file.name.endsWith(".docx"))
-    ) {
-      setSelectedFile(file);
+  const handleFileSelect = (file, fileList) => {
+    const isValidFile = (f) =>
+      f && (
+        f.type === "application/pdf" ||
+        f.name.endsWith(".pdf") ||
+        f.name.endsWith(".doc") ||
+        f.name.endsWith(".docx")
+      );
+
+    const validFiles = fileList.filter(isValidFile);
+    if (validFiles.length !== fileList.length) {
+      setError("Please select valid CV files (PDF, DOC, or DOCX)");
+    } else {
       setError("");
       setSuccess("");
-    } else {
-      setError("Please select a valid CV file (PDF, DOC, or DOCX)");
-      setSelectedFile(null);
     }
-    return false; // Prevent automatic upload by Ant Design
+    setFileList(validFiles);
+    return false; // Prevent automatic upload
   };
 
   const initializeSystem = async () => {
@@ -51,8 +52,8 @@ const CVUpload = () => {
   };
 
   const uploadCV = async () => {
-    if (!selectedFile) {
-      setError("Please select a CV file first");
+    if (fileList.length === 0) {
+      setError("Please select at least one CV file");
       return;
     }
 
@@ -65,9 +66,11 @@ const CVUpload = () => {
       setSuccess("🔄 Initializing recommendation system...");
       await initializeSystem();
 
-      setSuccess("📤 Uploading and analyzing CV...");
+      setSuccess("📤 Uploading and analyzing CVs...");
       const formData = new FormData();
-      formData.append("cvFile", selectedFile);
+      fileList.forEach((file) => {
+        formData.append("cvFiles", file.originFileObj || file);
+      });
 
       const response = await fetch(`${API_BASE}/complete-flow/upload-cv`, {
         method: "POST",
@@ -81,11 +84,10 @@ const CVUpload = () => {
       const result = await response.json();
 
       if (result.success) {
-        setJobRecommendations(result.data.jobRecommendations || []);
+        const combinedRecommendations = result.data.jobRecommendations || [];
+        setJobRecommendations(combinedRecommendations);
         setSuccess(
-          `✅ Success! Found ${
-            result.data.totalRecommendations || 0
-          } job recommendations`
+          `✅ Success! Found ${combinedRecommendations.length} job recommendations for ${fileList.length} CVs`
         );
       } else {
         throw new Error(result.error || "Upload failed");
@@ -100,9 +102,12 @@ const CVUpload = () => {
 
   const uploadProps = {
     beforeUpload: handleFileSelect,
-    fileList: selectedFile ? [selectedFile] : [],
-    onRemove: () => setSelectedFile(null),
+    fileList,
+    onRemove: (file) => {
+      setFileList(fileList.filter((f) => f.uid !== file.uid));
+    },
     accept: ".pdf,.doc,.docx",
+    multiple: true,
     showUploadList: {
       showRemoveIcon: true,
     },
@@ -112,16 +117,16 @@ const CVUpload = () => {
     <div className="container mx-auto p-6">
       <Card className="shadow-lg">
         <Title level={2} className="text-center mb-4">
-          📄 Upload Your CV
+          📄 Upload Your CVs
         </Title>
         <Paragraph className="text-center text-gray-600 mb-6">
-          Upload your CV to get personalized job recommendations powered by AI
+          Upload one or more CVs to get personalized job recommendations powered by AI
         </Paragraph>
 
         {/* File Upload Area */}
         <Upload
           {...uploadProps}
-          className="flex justify-center"
+          className="flex justify-center flex-col items-center mb-6"
           listType="picture"
         >
           <Button
@@ -129,20 +134,30 @@ const CVUpload = () => {
             size="large"
             className="bg-blue-500 text-white hover:bg-blue-600"
           >
-            {selectedFile ? `Selected: ${selectedFile.name}` : "Select CV File"}
+            Select CV Files
           </Button>
         </Upload>
-        {selectedFile && (
+        {fileList.length > 0 && (
           <div className="text-center mt-4">
             <Paragraph>
-              File Size: {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+              {fileList.length} file(s) selected
             </Paragraph>
+            <List
+              dataSource={fileList}
+              renderItem={(file) => (
+                <List.Item>
+                  <Paragraph>
+                    {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
+                  </Paragraph>
+                </List.Item>
+              )}
+            />
           </div>
         )}
-        {!selectedFile && (
+        {!fileList.length && (
           <div className="text-center mt-4 text-gray-500">
             <Paragraph>Supported formats: PDF, DOC, DOCX</Paragraph>
-            <Paragraph>Maximum size: 10MB</Paragraph>
+            <Paragraph>Maximum size: 10MB per file</Paragraph>
           </div>
         )}
 
@@ -152,7 +167,7 @@ const CVUpload = () => {
             type="primary"
             size="large"
             onClick={uploadCV}
-            disabled={!selectedFile || isUploading}
+            disabled={fileList.length === 0 || isUploading}
             loading={isUploading}
             className="bg-green-500 hover:bg-green-600"
           >
@@ -251,9 +266,9 @@ const CVUpload = () => {
         )}
 
         {/* No Results Message */}
-        {!isUploading && jobRecommendations.length === 0 && selectedFile && (
+        {!isUploading && jobRecommendations.length === 0 && fileList.length > 0 && (
           <Alert
-            message="No job recommendations found. Try uploading a different CV or ensure your CV contains relevant skills and experience."
+            message="No job recommendations found. Try uploading different CVs or ensure your CVs contain relevant skills and experience."
             type="info"
             showIcon
             className="mt-4 max-w-md mx-auto"

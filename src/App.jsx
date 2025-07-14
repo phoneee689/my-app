@@ -104,7 +104,7 @@ function AppContent() {
                 fontWeight: "600"
               }}
             >
-              Upload CV → Get Jobs
+            <span className="pl-2 pr-2 inline-flex justify-center items-center">  Upload CV → Get Jobs</span>
             </Button>
             <Button
               type={activeTab === "job-selector" ? "primary" : "default"}
@@ -119,7 +119,8 @@ function AppContent() {
                 fontWeight: "600"
               }}
             >
-              Select Job → Get CVs
+                <span className="pl-2 pr-2 inline-flex justify-center items-center">    Select Job → Get CVs</span>
+            
             </Button>
             <Button
               type="primary"
@@ -136,7 +137,8 @@ function AppContent() {
                 border: "none"
               }}
             >
-              Analytics Dashboard
+              <span className="pl-2 pr-2 inline-flex justify-center items-center">  Analytics Dashboard</span>
+             
             </Button>
           </div>
         </div>
