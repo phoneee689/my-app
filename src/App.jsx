@@ -94,7 +94,7 @@ function AppContent() {
             <Button
               type={activeTab === "cv-upload" ? "primary" : "default"}
               size="large"
-              icon={<FileUp />}
+              icon={<FileUp style={{ display: "inline-flex", alignItems: "center" }}/>}
               onClick={() => handleTabChange("cv-upload")}
               style={{
                 height: "48px",
@@ -109,7 +109,7 @@ function AppContent() {
             <Button
               type={activeTab === "job-selector" ? "primary" : "default"}
               size="large"
-              icon={<Briefcase />}
+              icon={<Briefcase style={{ display: "inline-flex", alignItems: "center" }}/>}
               onClick={() => handleTabChange("job-selector")}
               style={{
                 height: "48px",
@@ -124,7 +124,7 @@ function AppContent() {
             <Button
               type="primary"
               size="large"
-              icon={<BarChart2 />}
+              icon={<BarChart2 style={{ display: "inline-flex", alignItems: "center", }}/>}
               onClick={handleGoToReportPage}
               style={{
                 height: "48px",
